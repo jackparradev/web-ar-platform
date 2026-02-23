@@ -1,26 +1,39 @@
+import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import ARCard from './ARCard'
 
-export default async function CardPage({ params }: { params: { slug: string } }) {
-  const { data: card } = await supabaseAdmin
+type PageProps = {
+  params: { slug: string }
+}
+
+export default async function CardPage({ params }: PageProps) {
+  const { data: card, error } = await supabaseAdmin
     .from('cards')
     .select('*, profiles(*)')
     .eq('slug', params.slug)
     .eq('published', true)
     .single()
 
-  if (!card) return <div>Tarjeta no encontrada</div>
+  if (error || !card) {
+    console.error('Card fetch error:', error)
+    return notFound()
+  }
 
-  // Obtener signed URL del .mind file
-  const { data: signedData } = await supabaseAdmin.storage
-    .from('mind-files')
-    .createSignedUrl(card.mind_file_path, 120)
+  const { data: signedData, error: signedError } =
+    await supabaseAdmin.storage
+      .from('mind-files')
+      .createSignedUrl(card.mind_file_path, 120)
+
+  if (signedError || !signedData?.signedUrl) {
+    console.error('Signed URL error:', signedError)
+    return <div>Error cargando archivo AR</div>
+  }
 
   return (
     <ARCard
       card={card}
       profile={card.profiles}
-      mindFileUrl={signedData?.signedUrl ?? ''}
+      mindFileUrl={signedData.signedUrl}
     />
   )
 }
