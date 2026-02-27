@@ -1,69 +1,85 @@
 'use server';
 
-import { Card } from '@/domain/types/card.types';
-// import { createClient } from '@/infra/db/supabase/server'; // Ready for real implementation
+import { createClient } from '@supabase/supabase-js';
+import { ARViewerData, ActionResult } from '@/domain/types/card.types';
 
-export type ActionResponse<T> =
-    | { success: true; data: T }
-    | { success: false; error: string };
+// Initialize Supabase with Service Role to bypass RLS for public cards reading
+// This ensures we get the needed data securely.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-/**
- * Fetches Card, Profile and links by Slug.
- * Implements the Result Object pattern for safe explicit error handling on the client.
- */
-export async function getCardBySlugAction(slug: string): Promise<ActionResponse<Card>> {
+// We use the admin client here to bypass RLS since AR viewers don't need to be authenticated users
+// Note: Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in your enviroment
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+export async function getCardDataBySlug(slug: string): Promise<ActionResult<ARViewerData>> {
     try {
-        // 1. Instanciar Supabase client cuando el proyecto esté conectado:
-        // const supabase = await createClient();
+        // 1. Fetch the Card details
+        // Only fetch if published is true to prevent leaking draft cards
+        const { data: card, error: cardError } = await supabaseAdmin
+            .from('cards')
+            .select('*')
+            .eq('slug', slug)
+            .eq('published', true)
+            .maybeSingle();
 
-        // 2. Ejecutar la query a Supabase:
-        // const { data, error } = await supabase
-        //   .from('cards')
-        //   .select('*, profile:profiles(*)')
-        //   .eq('slug', slug)
-        //   .eq('is_active', true)
-        //   .single();
+        if (cardError) {
+            console.error('getCardDataBySlug - Database error fetching card:', cardError);
+            return { success: false, error: 'Database error fetching card' };
+        }
 
-        // if (error) throw new Error(error.message);
-        // if (!data) throw new Error('Card not found');
+        if (!card) {
+            return { success: false, error: 'Card not found or un-published' };
+        }
 
-        // 3. Crear Signed URL si el target .mind es privado:
-        // const { data: signedData } = await supabase.storage
-        //   .from('targets')
-        //   .createSignedUrl(data.mind_file_path, 60);
+        if (!card.user_id) {
+            return { success: false, error: 'Invalid card configuration: Missing User ID' };
+        }
 
-        // MOCK DATA: Simulación basada en el MVP proporcionado
-        const mockData: Card = {
-            id: 'mock-123',
-            slug,
-            tenantId: 'tenant-demo',
-            isActive: true,
-            mindFileUrl: './assets/targets/cardtest.mind', // Mock URL
-            profile: {
-                id: 'prof-123',
-                firstName: 'Jack Stalin',
-                lastName: 'Parra',
-                jobTitle: 'Full Stack Developer',
-                avatarUrl: './assets/ui/Perfil.png'
-            },
-            companyLogoUrl: './assets/ui/dev26.png',
-            socialLinks: {
-                github: 'https://github.com/jackparradev',
-                linkedin: 'https://www.linkedin.com/in/jackparradev/',
-                phone: 'https://wa.me/51950886127'
-            }
-        };
+        // 2. Fetch the corresponding Profile
+        // NOTE: We do a secondary query instead of a direct JOIN (.select('*, profiles(*)')) because 
+        // the current Supabase SQL schema enforces foreign keys strictly on `auth.users(id)` and not between points 
+        // of `cards.user_id` to `profiles.id` directly. 
+        const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('id', card.user_id)
+            .maybeSingle();
 
+        if (profileError) {
+            console.error('getCardDataBySlug - Database error fetching profile:', profileError);
+            return { success: false, error: 'Database error fetching profile' };
+        }
+
+        if (!profile) {
+            return { success: false, error: 'Associated profile not found' };
+        }
+
+        // 3. Generate Signed URL for the Mind File (120s TTL)
+        const { data: signedData, error: signedError } = await supabaseAdmin
+            .storage
+            .from('mind-files')
+            // FIX #5: TTL aumentado a 3600s (1h) para evitar que el fetch de MindAR
+            // falle con 403 Forbidden en conexiones lentas o cuando el usuario
+            // tarda en abrir la URL.
+            .createSignedUrl(card.mind_file_path, 3600);
+
+        if (signedError || !signedData?.signedUrl) {
+            console.error('getCardDataBySlug - Signed URL error:', signedError);
+            return { success: false, error: 'Could not generate secure AR file link' };
+        }
+
+        // Return the successful AR Data consolidation
         return {
             success: true,
-            data: mockData
+            data: {
+                card,
+                profile,
+                mindUrl: signedData.signedUrl
+            }
         };
-
-    } catch (error) {
-        console.error(`[getCardBySlugAction] Error fetching card '${slug}':`, error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown server error'
-        };
+    } catch (err: unknown) {
+        console.error('getCardDataBySlug - Exception:', err);
+        return { success: false, error: 'Internal server exception fetching AR content' };
     }
 }

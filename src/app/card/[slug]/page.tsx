@@ -1,10 +1,5 @@
-import { getCardBySlugAction } from '@/infra/actions/card.actions'
-import dynamic from 'next/dynamic'
-
-const ARCardWrapperDynamic = dynamic(
-  () => import('@/ui/components/features/ar/ARCardWrapper'),
-  { ssr: false }
-)
+import { getCardDataBySlug } from '@/infra/actions/card.actions'
+import ARCardDynamic from '@/ui/components/features/ar/ARCardDynamic'
 
 export default async function CardPage(
   { params }: { params: Promise<{ slug: string }> }
@@ -13,7 +8,7 @@ export default async function CardPage(
   const { slug } = await params
 
   // 1. Fetch data from infra action
-  const result = await getCardBySlugAction(slug)
+  const result = await getCardDataBySlug(slug)
 
   // 2. Handle specific action errors
   if (!result.success) {
@@ -28,9 +23,12 @@ export default async function CardPage(
   }
 
   // 3. Return the dynamic AR element
+  // FIX #3: Sin overflow-hidden ni bg-black — a-scene (position:fixed) cubre
+  // el viewport por su cuenta. overflow-hidden recortaba el canvas y bg-black
+  // pintaba una capa negra encima del feed de cámara.
   return (
-    <main className="relative w-full h-screen overflow-hidden bg-black">
-      <ARCardWrapperDynamic card={result.data} />
+    <main className="relative w-full h-screen">
+      <ARCardDynamic data={result.data} />
     </main>
   )
 }

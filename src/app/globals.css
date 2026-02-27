@@ -5,15 +5,51 @@
 }
 
 /* ───────────────────────────── */
-/* ESCENA AR (A-Frame Global Styles) */
+/* ESCENA AR — A-Frame + MindAR  */
+/* FIX #4: Reglas críticas para  */
+/* que el feed de cámara sea     */
+/* siempre visible               */
 /* ───────────────────────────── */
+
+/* La escena AR cubre todo el viewport y queda detrás de la UI React */
 a-scene {
   position: fixed !important;
-  inset: 0;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
 }
 
+/*
+ * El canvas de WebGL de A-Frame debe ser transparente para que el
+ * <video> de MindAR (que está detrás) sea visible como fondo de cámara
+ */
 canvas {
   background: transparent !important;
+}
+
+/*
+ * MindAR inyecta un <video> y un contenedor .mindar-ui-overlay en el DOM.
+ * Los resets de Tailwind pueden colapsar estos elementos.
+ * Estos estilos garantizan que el feed de cámara siempre sea visible.
+ */
+.mindar-ui-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  overflow: hidden !important;
+}
+
+.mindar-ui-inner {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* El <video> del feed de cámara NUNCA debe quedar oculto */
+video {
+  display: block;
+  object-fit: cover;
 }
 
 /* ───────────────────────────── */

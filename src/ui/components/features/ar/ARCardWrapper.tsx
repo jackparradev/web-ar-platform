@@ -5,13 +5,15 @@ import { useARTracking } from '@/core/hooks/useARTracking';
 import { useARInteraction } from '@/core/hooks/useARInteraction';
 import ScanOverlay from '@/ui/components/features/ar/ScanOverlay';
 import ARViewer from '@/ui/components/features/ar/ARViewer';
-import { Card } from '@/domain/types/card.types';
+import { ARViewerData } from '@/domain/types/card.types';
 
 export interface ARCardWrapperProps {
-    card: Card;
+    data: ARViewerData;
 }
 
-export const ARCardWrapper: React.FC<ARCardWrapperProps> = ({ card }) => {
+export const ARCardWrapper: React.FC<ARCardWrapperProps> = ({ data }) => {
+    const { card } = data;
+
     // 1. Estados limpios provistos por el Hook
     const { isTargetFound, isDeployed } = useARTracking('#card-anchor');
 
@@ -20,9 +22,10 @@ export const ARCardWrapper: React.FC<ARCardWrapperProps> = ({ card }) => {
         console.log('Action triggered:', action);
 
         const LINKS: Record<string, string> = {
-            github: card.socialLinks?.github ?? '',
-            linkedin: card.socialLinks?.linkedin ?? '',
-            phone: card.socialLinks?.phone ?? ''
+            github: card.github_url ?? '',
+            linkedin: card.linkedin_url ?? '',
+            phone: card.whatsapp ? `https://wa.me/${card.whatsapp.replace(/\D/g, '')}` : '',
+            email: card.email ? `mailto:${card.email}` : '',
         };
 
         if (LINKS[action]) {
@@ -38,7 +41,7 @@ export const ARCardWrapper: React.FC<ARCardWrapperProps> = ({ card }) => {
         <>
             <ScanOverlay isScanning={!isTargetFound} isLost={!isDeployed} />
             <ARViewer
-                card={card}
+                data={data}
                 isDeployed={isDeployed}
             />
         </>
