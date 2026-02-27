@@ -1,5 +1,10 @@
-import { supabaseAdmin } from '@/lib/supabase/server'
-import ARCard from './ARCard'
+import { getCardBySlugAction } from '@/infra/actions/card.actions'
+import dynamic from 'next/dynamic'
+
+const ARCardWrapperDynamic = dynamic(
+  () => import('@/ui/components/features/ar/ARCardWrapper'),
+  { ssr: false }
+)
 
 export default async function CardPage(
   { params }: { params: Promise<{ slug: string }> }
@@ -7,36 +12,25 @@ export default async function CardPage(
 
   const { slug } = await params
 
-  const { data: card, error: cardError } = await supabaseAdmin
-    .from('cards')
-    .select('*')
-    .eq('slug', slug)
-    .eq('published', true)
-    .single()
+  // 1. Fetch data from infra action
+  const result = await getCardBySlugAction(slug)
 
-  if (!card || cardError) {
-    return <div>Tarjeta no encontrada</div>
+  // 2. Handle specific action errors
+  if (!result.success) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Error cargando tarjeta</h1>
+          <p className="text-gray-400">{result.error}</p>
+        </div>
+      </div>
+    )
   }
 
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .eq('id', card.user_id)
-    .single()
-
-  if (!profile || profileError) {
-    return <div>Perfil no encontrado</div>
-  }
-
-  const { data: signedData } = await supabaseAdmin.storage
-    .from('mind-files')
-    .createSignedUrl(card.mind_file_path, 120)
-
+  // 3. Return the dynamic AR element
   return (
-    <ARCard
-      card={card}
-      profile={profile}
-      mindFileUrl={signedData?.signedUrl ?? ''}
-    />
+    <main className="relative w-full h-screen overflow-hidden bg-black">
+      <ARCardWrapperDynamic card={result.data} />
+    </main>
   )
 }
