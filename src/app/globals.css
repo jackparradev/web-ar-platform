@@ -3,3 +3,38 @@
 @theme {
   --color-brand-primary: #3AA3FF;
 }
+
+/* ───────────────────────────── */
+/* ESCENA AR (A-Frame Global Styles) */
+/* ───────────────────────────── */
+a-scene {
+  position: fixed !important;
+  inset: 0;
+}
+
+canvas {
+  background: transparent !important;
+}
+
+/* ───────────────────────────── */
+/* ANIMACIONES COMPLEJAS */
+/* ───────────────────────────── */
+@keyframes beam-sweep {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
