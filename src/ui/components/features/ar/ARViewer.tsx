@@ -3,15 +3,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ARViewerData } from '@/domain/types/card.types';
 
-// ── Constantes de assets (públicos en Supabase Storage) ─────────────────────
+// ── Assets públicos en Supabase Storage ──────────────────────────────────────
 const ASSETS = {
     logo: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/devNeg26.png',
     github: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/github-logo_icon-icons.com_73546.svg',
     linkedin: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/LINKEDIN_icon-icons.com_65488.svg',
     whatsapp: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/whatsapp-logo_icon-icons.com_57054.svg',
-    email: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/arroba_122776.svg',
-    perfil: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/Perfil.jpg',
+    email: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/at-sign-svgrepo-com.svg',
+    perfil: 'https://mnbxsjylwhllkgdkfvoc.supabase.co/storage/v1/object/public/profile-images/Perfil26.png',
 } as const;
+
+// Color de fondo de los paneles (navy oscuro — fijo, no viene de la tarjeta)
+const PANEL_BG = '#0A1F33';
+// Acento de borde superior (viene de primary_color de la tarjeta)
+const ACCENT_DEF = '#3AA3FF';
 
 interface ARViewerProps {
     data: ARViewerData;
@@ -25,16 +30,11 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
 
     const { card, profile } = data;
 
-    // Color primario de la tarjeta (default: azul marca)
-    const primaryColor = card.primary_color ?? '#3AA3FF';
-    const secondaryColor = card.secondary_color ?? '#0F1C2E';
+    const accentColor = card.primary_color ?? ACCENT_DEF;
+    // Forzamos Perfil.jpg directamente — avatar_url en la DB apunta al logo incorrecto
+    const avatarUrl = ASSETS.perfil;
 
-    // Foto de perfil — usa la de Supabase si existe, si no, el asset predefinido
-    const avatarUrl = profile.avatar_url ?? ASSETS.perfil;
-    // Logo de la tarjeta — usa el de la tarjeta si hay uno, si no PJAPEX
-    const logoUrl = card.logo_url ?? ASSETS.logo;
-
-    // ── Polling de AFRAME ────────────────────────────────────────────────────
+    // ── Polling AFRAME ───────────────────────────────────────────────────────
     useEffect(() => {
         if (typeof window === 'undefined') return;
         if ((window as any).AFRAME) { setIsAframeReady(true); return; }
@@ -48,47 +48,43 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
         }, 50);
         const timeout = setTimeout(() => {
             clearInterval(interval);
-            setCameraError('No se pudieron cargar los scripts de AR. Verifica tu conexión y recarga la página.');
+            setCameraError('No se pudieron cargar los scripts de AR. Verifica tu conexión y recarga.');
         }, 10_000);
 
         return () => { clearInterval(interval); clearTimeout(timeout); };
     }, []);
 
-    // ── Errores de MindAR / Cámara ───────────────────────────────────────────
+    // ── Errores MindAR / cámara ──────────────────────────────────────────────
     useEffect(() => {
         if (!isAframeReady) return;
         const sceneEl = sceneRef.current;
         if (!sceneEl) return;
 
-        let fatalErrorTimer: ReturnType<typeof setTimeout> | null = null;
+        let timer: ReturnType<typeof setTimeout> | null = null;
 
         const handleARError = (event: any) => {
             const detail = event?.detail ?? event;
-            const errorMsg = detail?.error?.message ?? detail?.message ?? JSON.stringify(detail);
-            console.error('[MindAR] arError — detail:', detail, '| message:', errorMsg);
-
-            if (fatalErrorTimer) clearTimeout(fatalErrorTimer);
-            fatalErrorTimer = setTimeout(() => {
-                const isCamera = errorMsg.toLowerCase().includes('permission') ||
-                    errorMsg.toLowerCase().includes('notallowed') ||
-                    errorMsg.toLowerCase().includes('camera');
+            const msg: string = detail?.error?.message ?? detail?.message ?? JSON.stringify(detail);
+            console.error('[MindAR] arError:', msg);
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                const isCamera = msg.toLowerCase().includes('permission') ||
+                    msg.toLowerCase().includes('notallowed');
                 setCameraError(isCamera
-                    ? 'Permiso de cámara denegado. Habilítalo en los ajustes del navegador y recarga.'
-                    : 'No se pudo cargar el archivo AR. Verifica permisos de cámara y conexión HTTPS.'
-                );
+                    ? 'Permiso de cámara denegado. Habilítalo en los ajustes y recarga.'
+                    : 'No se pudo cargar el archivo AR. Verifica permisos y conexión HTTPS.');
             }, 2000);
         };
 
-        const handleCameraError = () => {
-            setCameraError('Permiso de cámara denegado. Por favor, habilítalo y recarga la página.');
-        };
+        const handleCameraError = () =>
+            setCameraError('Permiso de cámara denegado. Habilítalo y recarga la página.');
 
         sceneEl.addEventListener('arError', handleARError);
         sceneEl.addEventListener('camera-error', handleCameraError);
         return () => {
             sceneEl.removeEventListener('arError', handleARError);
             sceneEl.removeEventListener('camera-error', handleCameraError);
-            if (fatalErrorTimer) clearTimeout(fatalErrorTimer);
+            if (timer) clearTimeout(timer);
         };
     }, [isAframeReady]);
 
@@ -98,7 +94,8 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
             <div className="fixed inset-0 flex flex-col items-center justify-center bg-black/90 p-6 z-[9999] text-center text-white">
                 <div className="text-red-500 mb-4">
                     <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Error de Cámara</h2>
@@ -122,17 +119,14 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    //  ESCENA AR
+    //  LAYOUT DE PANELES
     //
-    //  Distribución de paneles sobre la tarjeta (vista frontal):
+    //   [panel-profile]          (vacío)          [panel-logo]
+    //    foto+nombre+cargo       —nada—            devNeg26.png
     //
-    //   [panel-profile]   [logo central]   [panel-logo]
-    //        izq                                der
-    //              [panel-links / redes]
-    //                     abajo
+    //        [panel-links — strip horizontal]
+    //         WhatsApp | GitHub | Email | LinkedIn
     //
-    //  Sistema de coordenadas MindAR: unidades = ancho del target image (≈ 1 unidad)
-    //  La tarjeta física mide ~8.5cm × 5.5cm → ratio ≈ 1.545:1
     // ────────────────────────────────────────────────────────────────────────
     return (
         <a-scene
@@ -143,10 +137,10 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
             vr-mode-ui="enabled: false"
             device-orientation-permission-ui="enabled: false"
         >
-            {/* ── Assets preload ─────────────────────────────────────────── */}
+            {/* ── Preload de assets ─────────────────────────────────────── */}
             <a-assets timeout="10000">
                 <img id="img-avatar" src={avatarUrl} crossOrigin="anonymous" alt="" />
-                <img id="img-logo" src={logoUrl} crossOrigin="anonymous" alt="" />
+                <img id="img-logo" src={ASSETS.logo} crossOrigin="anonymous" alt="" />
                 <img id="img-github" src={ASSETS.github} crossOrigin="anonymous" alt="" />
                 <img id="img-linkedin" src={ASSETS.linkedin} crossOrigin="anonymous" alt="" />
                 <img id="img-whatsapp" src={ASSETS.whatsapp} crossOrigin="anonymous" alt="" />
@@ -155,14 +149,14 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
 
             <a-camera position="0 0 0" look-controls="enabled: false" />
 
-            {/* ── Anchor del target ──────────────────────────────────────── */}
+            {/* ── Target anchor ─────────────────────────────────────────── */}
             <a-entity id="card-anchor" mindar-image-target="targetIndex: 0">
 
-                {/* ── PANEL IZQUIERDO — Perfil ──────────────────────────── */}
-                {/*
-                  Contenido: foto circular + nombre + título
-                  Acción: abre GitHub
-                */}
+                {/* ════════════════════════════════════════════════════════
+                    PANEL IZQUIERDO — Perfil
+                    Foto circular + Nombre + Cargo
+                    Tap → abre GitHub
+                   ════════════════════════════════════════════════════════ */}
                 <a-entity
                     id="panel-profile"
                     className="clickable"
@@ -173,80 +167,53 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
                         animation: 'property: position; from: 0 0 -0.3; to: -0.82 0.05 0.05; dur: 700; easing: easeOutExpo; delay: 0'
                     })}
                 >
-                    {/* Fondo del panel */}
+                    {/* Fondo oscuro navy — sin borde de acento */}
                     <a-plane
-                        width="0.55"
-                        height="0.72"
-                        color={secondaryColor}
-                        opacity="0.92"
-                        material={`shader: flat; opacity: 0.92; color: ${secondaryColor}`}
+                        width="0.55" height="0.70"
+                        color={PANEL_BG}
+                        material={`shader: flat; color: ${PANEL_BG}`}
                     />
 
-                    {/* Borde superior de color primario */}
-                    <a-plane
-                        width="0.55"
-                        height="0.025"
-                        position="0 0.348 0.001"
-                        color={primaryColor}
-                        material={`shader: flat; color: ${primaryColor}`}
-                    />
-
-                    {/* Foto de perfil circular */}
-                    <a-circle
+                    {/* Foto circular — sin marco/relleno extra */}
+                    <a-image
                         src="#img-avatar"
-                        radius="0.14"
+                        width="0.27"
+                        height="0.27"
                         position="0 0.15 0.002"
-                        material="shader: flat"
+                        material="shader: flat; transparent: true"
                     />
 
-                    {/* Nombre */}
+                    {/* Nombre — ancho limitado al panel (≤0.50) */}
                     <a-text
                         value={profile.display_name ?? 'Nombre'}
                         align="center"
                         color="#FFFFFF"
-                        width="0.95"
-                        position="0 -0.06 0.002"
-                        font="roboto"
-                        letter-spacing="1"
-                        wrap-count="18"
+                        width="0.48"
+                        position="0 -0.08 0.002"
+                        wrap-count="16"
                     />
 
-                    {/* Título/cargo */}
+                    {/* Cargo — ancho limitado */}
                     <a-text
                         value={profile.job_title ?? ''}
                         align="center"
-                        color={primaryColor}
-                        width="0.78"
-                        position="0 -0.16 0.002"
-                        font="roboto"
-                        letter-spacing="0"
-                        wrap-count="20"
-                    />
-
-                    {/* Ícono GitHub pequeño abajo */}
-                    <a-image
-                        src="#img-github"
-                        width="0.09"
-                        height="0.09"
-                        position="0 -0.29 0.002"
-                        material="shader: flat; transparent: true"
+                        color={accentColor}
+                        width="0.46"
+                        position="0 -0.21 0.002"
+                        wrap-count="18"
                     />
                 </a-entity>
 
-                {/* ── LOGO CENTRAL — siempre visible sobre la tarjeta ──── */}
-                {/*
-                  Aparece solo con el tracking, antes de isDeployed
-                  para dar continuidad visual desde el cubo de prueba.
-                */}
-                <a-image
-                    src="#img-logo"
-                    width="0.38"
-                    height="0.18"
-                    position="0 0.05 0.001"
-                    material="shader: flat; transparent: true"
-                />
+                {/* ════════════════════════════════════════════════════════
+                    CENTRO — Vacío (sin logo)
+                    No se renderiza nada aquí.
+                   ════════════════════════════════════════════════════════ */}
 
-                {/* ── PANEL DERECHO — LinkedIn ──────────────────────────── */}
+                {/* ════════════════════════════════════════════════════════
+                    PANEL DERECHO — Logo devNeg26.png
+                    La imagen del logo ocupa todo el panel.
+                    Tap → abre LinkedIn
+                   ════════════════════════════════════════════════════════ */}
                 <a-entity
                     id="panel-logo"
                     className="clickable"
@@ -257,134 +224,95 @@ export const ARViewer: React.FC<ARViewerProps> = ({ data, isDeployed }) => {
                         animation: 'property: position; from: 0 0 -0.3; to: 0.82 0.05 0.05; dur: 700; easing: easeOutExpo; delay: 180'
                     })}
                 >
-                    {/* Fondo */}
+                    {/* Fondo oscuro navy — sin borde de acento */}
                     <a-plane
-                        width="0.55"
-                        height="0.72"
-                        color={secondaryColor}
-                        opacity="0.92"
-                        material={`shader: flat; opacity: 0.92; color: ${secondaryColor}`}
+                        width="0.55" height="0.70"
+                        color={PANEL_BG}
+                        material={`shader: flat; color: ${PANEL_BG}`}
                     />
 
-                    {/* Borde superior */}
-                    <a-plane
-                        width="0.55"
-                        height="0.025"
-                        position="0 0.348 0.001"
-                        color={primaryColor}
-                        material={`shader: flat; color: ${primaryColor}`}
-                    />
-
-                    {/* Logo LinkedIn grande */}
+                    {/* Logo devNeg26.png — centrado, grande */}
                     <a-image
-                        src="#img-linkedin"
-                        width="0.22"
-                        height="0.22"
-                        position="0 0.12 0.002"
+                        src="#img-logo"
+                        width="0.42"
+                        height="0.42"
+                        position="0 0.02 0.002"
                         material="shader: flat; transparent: true"
-                    />
-
-                    <a-text
-                        value="LinkedIn"
-                        align="center"
-                        color="#FFFFFF"
-                        width="0.9"
-                        position="0 -0.1 0.002"
-                        font="roboto"
-                        letter-spacing="2"
-                    />
-
-                    <a-text
-                        value={profile.username ? `@${profile.username}` : ''}
-                        align="center"
-                        color={primaryColor}
-                        width="0.8"
-                        position="0 -0.21 0.002"
-                        font="roboto"
-                        wrap-count="22"
                     />
                 </a-entity>
 
-                {/* ── PANEL INFERIOR — Links / Redes ─────────────────────── */}
+                {/* ════════════════════════════════════════════════════════
+                    PANEL INFERIOR — Strip de links
+                    4 columnas: WhatsApp | GitHub | Email | LinkedIn
+                   ════════════════════════════════════════════════════════ */}
                 <a-entity
                     id="panel-links"
-                    className="clickable"
-                    data-action="phone"
                     position={isDeployed ? '0 -0.58 0.05' : '0 0 -0.3'}
                     visible={isDeployed ? 'true' : 'false'}
                     {...(isDeployed && {
                         animation: 'property: position; from: 0 0 -0.3; to: 0 -0.58 0.05; dur: 650; easing: easeOutExpo; delay: 360'
                     })}
                 >
-                    {/* Fondo horizontal */}
+                    {/* Fondo horizontal — sin borde de acento */}
                     <a-plane
-                        width="1.85"
-                        height="0.28"
-                        color={secondaryColor}
-                        opacity="0.92"
-                        material={`shader: flat; opacity: 0.92; color: ${secondaryColor}`}
+                        width="2.0" height="0.30"
+                        color={PANEL_BG}
+                        material={`shader: flat; color: ${PANEL_BG}`}
                     />
 
-                    {/* Borde izquierdo de color primario */}
-                    <a-plane
-                        width="0.025"
-                        height="0.28"
-                        position="-0.9 0 0.001"
-                        color={primaryColor}
-                        material={`shader: flat; color: ${primaryColor}`}
-                    />
-
-                    {/* WhatsApp */}
-                    <a-entity position="-0.6 0 0.002" className="clickable" data-action="phone">
+                    {/* WhatsApp — columna 1 */}
+                    <a-entity position="-0.72 0 0.002" className="clickable" data-action="phone">
                         <a-image
                             src="#img-whatsapp"
-                            width="0.1"
-                            height="0.1"
+                            width="0.11" height="0.11"
                             material="shader: flat; transparent: true"
                         />
                         <a-text
                             value="WhatsApp"
-                            align="center"
-                            color="#FFFFFF"
-                            width="0.65"
-                            position="0 -0.1 0"
-                            font="roboto"
+                            align="center" color="#FFFFFF"
+                            width="0.65" position="0 -0.1 0"
                         />
                     </a-entity>
 
-                    {/* GitHub */}
-                    <a-entity position="0 0 0.002" className="clickable" data-action="github">
+                    {/* GitHub — columna 2 */}
+                    <a-entity position="-0.24 0 0.002" className="clickable" data-action="github">
                         <a-image
                             src="#img-github"
-                            width="0.1"
-                            height="0.1"
+                            width="0.11" height="0.11"
                             material="shader: flat; transparent: true"
                         />
                         <a-text
                             value="GitHub"
-                            align="center"
-                            color="#FFFFFF"
-                            width="0.65"
-                            position="0 -0.1 0"
-                            font="roboto"
+                            align="center" color="#FFFFFF"
+                            width="0.65" position="0 -0.1 0"
                         />
                     </a-entity>
 
-                    {/* Email */}
-                    <a-entity position="0.6 0 0.002" className="clickable" data-action="email">
+                    {/* Email — columna 3 */}
+                    <a-entity position="0.24 0 0.002" className="clickable" data-action="email">
                         <a-image
                             src="#img-email"
-                            width="0.1"
-                            height="0.1"
+                            width="0.11" height="0.11"
                             material="shader: flat; transparent: true"
                         />
                         <a-text
                             value="Email"
-                            align="center"
-                            color="#FFFFFF"
-                            width="0.65"
-                            position="0 -0.1 0"
-                            font="roboto"
+                            align="center" color="#FFFFFF"
+                            width="0.65" position="0 -0.1 0"
+                        />
+                    </a-entity>
+
+                    {/* LinkedIn — columna 4 */}
+                    <a-entity position="0.72 0 0.002" className="clickable" data-action="linkedin">
+                        <a-image
+                            src="#img-linkedin"
+                            width="0.11" height="0.11"
+                            material="shader: flat; transparent: true"
+                        />
+                        <a-text
+                            value="LinkedIn"
+                            align="center" color="#FFFFFF"
+                            width="0.65" position="0 -0.1 0"
                         />
                     </a-entity>
                 </a-entity>
